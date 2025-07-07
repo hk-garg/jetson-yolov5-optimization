@@ -1,0 +1,62 @@
+import numpy as np
+import tensorrt as trt
+import pycuda.driver as cuda
+import pycuda.autoinit  # Automatically initializes CUDA driver
+import cv2
+
+TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+
+def load_engine(engine_file_path):
+    with open(engine_file_path, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime:
+        return runtime.deserialize_cuda_engine(f.read())
+
+def preprocess(image_path):
+    image = cv2.imread(image_path)
+    image_resized = cv2.resize(image, (640, 640))
+    image_rgb = cv2.cvtColor(image_resized, cv2.COLOR_BGR2RGB)
+    image_normalized = image_rgb.astype(np.float32) / 255.0
+    image_transposed = np.transpose(image_normalized, (2, 0, 1))
+    image_input = np.expand_dims(image_transposed, axis=0).astype(np.float32)
+    return np.ascontiguousarray(image_input)
+
+def infer(engine, input_image):
+    input_binding_idx = engine.get_binding_index("images")
+    output_binding_idx = engine.get_binding_index("output0")
+
+    context = engine.create_execution_context()
+    stream = cuda.Stream()
+
+    input_nbytes = input_image.nbytes
+    output_shape = (1, 25200, 85)
+    output_nbytes = np.empty(output_shape, dtype=np.float32).nbytes
+
+    # Allocate device memory
+    d_input = cuda.mem_alloc(input_nbytes)
+    d_output = cuda.mem_alloc(output_nbytes)
+
+    # Transfer input to device
+    cuda.memcpy_htod_async(d_input, input_image, stream)
+
+    # Run inference
+    bindings = [int(d_input), int(d_output)]
+    context.execute_async_v2(bindings=bindings, stream_handle=stream.handle)
+
+    # Transfer predictions back
+    output_host = np.empty(output_shape, dtype=np.float32)
+    cuda.memcpy_dtoh_async(output_host, d_output, stream)
+    stream.synchronize()
+
+    print(f"Output shape: {output_host.shape}")
+
+    # Clean up
+    del context
+    del stream
+    del d_input
+    del d_output
+
+    return output_host
+
+if __name__ == "__main__":
+    engine = load_engine("yolov5.trt")
+    input_image = preprocess("zidane.jpg")  # replace with your image path
+    output = infer(engine, input_image)

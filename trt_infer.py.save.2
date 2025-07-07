@@ -1,0 +1,62 @@
+import pycuda.driver as cuda
+import pycuda.autoinit
+import numpy as np
+import cv2
+import tensorrt as trt
+
+TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+
+# Load engine
+def load_engine(trt_runtime, engine_path):
+    with open(engine_path, "rb") as f:
+        engine_data = f.read()
+    return trt_runtime.deserialize_cuda_engine(engine_data)
+
+def preprocess_image(image_path):
+    image = cv2.imread(image_path)
+    image_resized = cv2.resize(image, (640, 640))
+    image_rgb = cv2.cvtColor(image_resized, cv2.COLOR_BGR2RGB)
+    image_transposed = np.transpose(image_rgb, (2, 0, 1))  # HWC to CHW
+    image_normalized = image_transposed.astype(np.float32) / 255.0
+    return np.expand_dims(image_normalized, axis=0)  # Add batch dim
+
+def infer(engine, input_image):
+    context = engine.create_execution_context()
+    input_binding_idx = engine.get_binding_index("images")
+    output_binding_idx = engine.get_binding_index("output0")
+
+    # Allocate memory
+    input_shape = input_image.shape
+    input_nbytes = input_image.nbytes
+    output_shape = (1, 25200, 85)
+    output_nbytes = np.prod(output_shape) * np.float32().itemsize
+
+    d_input = cuda.mem_alloc(input_nbytes)
+    d_output = cuda.mem_alloc(int(output_nbytes))
+
+    bindings = [int(d_input), int(d_output)]
+
+    stream = cuda.Stream()
+
+    # Transfer input data
+    cuda.memcpy_htod_async(d_input, np.ascontiguousarray(input_image), stream)
+    context.execute_async_v2(bindings=bindings, stream_handle=stream.handle)
+    output = np.empty(output_shape, dtype=np.float32)
+    cuda.memcpy_dtoh_async(output, d_output, stream)
+    stream.synchronize()
+    return output
+
+if __name__ == "__main__":
+    engine = load_engine(trt.Runtime(TRT_LOGGER), "yolov5s.trt")
+    input_image = preprocess_image("zidane.jpg")  # <- change path
+    output = infer(engine, input_image)
+    print("Output shape:", output.shape)
+    stream.synchronize()
+    del d_input, d_output, bindings, context, engine
+    print("Output shape:", output.shape)
+    stream.synchronize()
+
+    # Cleanup
+    del d_input, d_output, bindings
+    context.__del__()
+    engine.__del__()
