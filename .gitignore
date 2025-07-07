@@ -1,4 +1,17 @@
 # Repo-specific GitIgnore ----------------------------------------------------------------------------------------------
+# Ignore large model or package files
+*.whl
+*.pt
+*.pth
+*.onnx
+*.engine
+*.log
+*.mp4
+
+# Ignore Python build and cache files
+__pycache__/
+*.pyc
+
 *.jpg
 *.jpeg
 *.png
