@@ -152,7 +152,7 @@ cusparseLtMatmulDescriptorInit(const cusparseLtHandle_t*        handle,
                                cusparseOperation_t              opB,
                                const cusparseLtMatDescriptor_t* matA,
                                const cusparseLtMatDescriptor_t* matB,
-                               const cusparseLtMatDescriptor_t* matC,
+                               const cusparseLtMatDescriptor_t* match,
                                const cusparseLtMatDescriptor_t* matD,
                                cusparseComputeType              computeType);
 
