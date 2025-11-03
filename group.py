@@ -1,33 +1,104 @@
 # All imports and constants same as before
-import numpy as np
-import tensorrt as trt
-import pycuda.driver as cuda
-import pycuda.autoinit
-import cv2
 import os
 import time
+
+import cv2
+import numpy as np
+import pycuda.driver as cuda
+import tensorrt as trt
 
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 CONF_THRESH = 0.1
 IOU_THRESH = 0.4
 
 CLASSES = [
-    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
-    "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
-    "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack",
-    "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball",
-    "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket",
-    "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
-    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake",
-    "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop",
-    "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
-    "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier",
-    "toothbrush"
+    "person",
+    "bicycle",
+    "car",
+    "motorcycle",
+    "airplane",
+    "bus",
+    "train",
+    "truck",
+    "boat",
+    "traffic light",
+    "fire hydrant",
+    "stop sign",
+    "parking meter",
+    "bench",
+    "bird",
+    "cat",
+    "dog",
+    "horse",
+    "sheep",
+    "cow",
+    "elephant",
+    "bear",
+    "zebra",
+    "giraffe",
+    "backpack",
+    "umbrella",
+    "handbag",
+    "tie",
+    "suitcase",
+    "frisbee",
+    "skis",
+    "snowboard",
+    "sports ball",
+    "kite",
+    "baseball bat",
+    "baseball glove",
+    "skateboard",
+    "surfboard",
+    "tennis racket",
+    "bottle",
+    "wine glass",
+    "cup",
+    "fork",
+    "knife",
+    "spoon",
+    "bowl",
+    "banana",
+    "apple",
+    "sandwich",
+    "orange",
+    "broccoli",
+    "carrot",
+    "hot dog",
+    "pizza",
+    "donut",
+    "cake",
+    "chair",
+    "couch",
+    "potted plant",
+    "bed",
+    "dining table",
+    "toilet",
+    "tv",
+    "laptop",
+    "mouse",
+    "remote",
+    "keyboard",
+    "cell phone",
+    "microwave",
+    "oven",
+    "toaster",
+    "sink",
+    "refrigerator",
+    "book",
+    "clock",
+    "vase",
+    "scissors",
+    "teddy bear",
+    "hair drier",
+    "toothbrush",
 ]
 
+
 def load_engine(engine_path):
-    with open(engine_path, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime:
+    with open(engine_path, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime:
         return runtime.deserialize_cuda_engine(f.read())
+
 
 def preprocess_batch(image_paths, input_shape=(1, 3, 640, 640)):
     batch_images, original_shapes, img_resized_list = [], [], []
@@ -49,6 +120,7 @@ def preprocess_batch(image_paths, input_shape=(1, 3, 640, 640)):
     batch_tensor = np.stack(batch_images, axis=0)
     return batch_tensor, original_shapes, img_resized_list
 
+
 def allocate_buffers(engine):
     binding_names = [engine.get_tensor_name(i) for i in range(engine.num_io_tensors)]
     input_binding = binding_names[0]
@@ -62,7 +134,7 @@ def allocate_buffers(engine):
         trt.float16: np.float16,
         trt.int8: np.int8,
         trt.int32: np.int32,
-        trt.bool: np.bool_
+        trt.bool: np.bool_,
     }
     input_dtype = engine.get_tensor_dtype(input_binding)
     output_dtype = engine.get_tensor_dtype(output_binding)
@@ -76,6 +148,7 @@ def allocate_buffers(engine):
 
     return d_input, d_output, bindings, input_shape, output_shape, input_binding, output_binding
 
+
 def do_inference(context, bindings, d_input, d_output, stream, input_data, output_shape, input_binding):
     cuda.memcpy_htod_async(d_input, input_data, stream)
     context.execute_async_v2(bindings=bindings, stream_handle=stream.handle)
@@ -83,6 +156,7 @@ def do_inference(context, bindings, d_input, d_output, stream, input_data, outpu
     cuda.memcpy_dtoh_async(output, d_output, stream)
     stream.synchronize()
     return output
+
 
 def postprocess(output, original_shapes, input_shape, conf_thres=CONF_THRESH, iou_thres=IOU_THRESH):
     results = []
@@ -134,6 +208,7 @@ def postprocess(output, original_shapes, input_shape, conf_thres=CONF_THRESH, io
         results.append((boxes, scores, class_ids))
     return results
 
+
 def draw_boxes(image, boxes, scores, class_ids):
     for box, score, class_id in zip(boxes, scores, class_ids):
         x1, y1, x2, y2 = map(int, box)
@@ -145,15 +220,13 @@ def draw_boxes(image, boxes, scores, class_ids):
         cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
     return image
 
-def main(engine_path, image_dir):
-#    image_paths = [os.path.join(image_dir, f"image{i}.jpg") for i in range(1, 6)]
-    image_paths = sorted([
-    os.path.join(image_dir, f)
-    for f in os.listdir(image_dir)
-    if f.lower().endswith((".jpg", ".jpeg", ".png"))
-	])
 
-    
+def main(engine_path, image_dir):
+    #    image_paths = [os.path.join(image_dir, f"image{i}.jpg") for i in range(1, 6)]
+    image_paths = sorted(
+        [os.path.join(image_dir, f) for f in os.listdir(image_dir) if f.lower().endswith((".jpg", ".jpeg", ".png"))]
+    )
+
     if not any(os.path.exists(path) for path in image_paths):
         raise ValueError("No images found in the directory.")
 
@@ -179,16 +252,18 @@ def main(engine_path, image_dir):
 
         stream = cuda.Stream()
         start_time = time.time()
-        output = do_inference(context, bindings, d_input, d_output, stream, input_data[i:i+1].ravel(), output_shape, input_binding)
+        output = do_inference(
+            context, bindings, d_input, d_output, stream, input_data[i : i + 1].ravel(), output_shape, input_binding
+        )
         inference_time = (time.time() - start_time) * 1000
         results = postprocess(output, [original_shapes[i]], input_shape)
 
-        print(f"\n=== Image {i+1} ===")
+        print(f"\n=== Image {i + 1} ===")
         print(f"Inference time: {inference_time:.2f} ms")
         if results and len(results[0][0]) > 0:
             boxes, scores, class_ids = results[0]
             for j, (box, score, class_id) in enumerate(zip(boxes, scores, class_ids)):
-                print(f"{j+1}. Class: {CLASSES[class_id]}, Confidence Score: {score:.2f}, at: {box.astype(int)}")
+                print(f"{j + 1}. Class: {CLASSES[class_id]}, Confidence Score: {score:.2f}, at: {box.astype(int)}")
         else:
             print("No valid detections.")
 
@@ -196,8 +271,8 @@ def main(engine_path, image_dir):
     d_input.free()
     d_output.free()
 
+
 if __name__ == "__main__":
     engine_path = "yolov5.trt"
     image_dir = "./images"
     main(engine_path, image_dir)
-
